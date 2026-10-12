@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Card, Settings } from '@/types'
+import type { Card, PracticeSession, Settings } from '@/types'
 import { DEFAULT_SETTINGS } from '@/types'
 import { storage } from '@/storage/localStorageAdapter'
 import { analyzeSentence, type AnalyzeResult } from '@/services/deepseek'
@@ -20,6 +20,7 @@ import { IconArrowLeft } from '@/components/hand/HandIcon'
 import { SettingsModal } from '@/components/SettingsModal'
 import { BackupModal } from '@/components/BackupModal'
 import { useToast } from '@/components/ConfirmDialog'
+import { PracticeView } from '@/components/PracticeView'
 
 const MAX_PASSAGE = 4000
 
@@ -81,7 +82,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   // UI 状态
-  const [page, setPage] = useState<'home' | 'steal' | 'library'>('home')
+  const [page, setPage] = useState<'home' | 'steal' | 'library' | 'practice'>('home')
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null)
@@ -100,12 +101,16 @@ export default function App() {
   // 重复句子弹窗
   const [dupDialog, setDupDialog] = useState<{ cardId: string } | null>(null)
 
+  // 练习会话（独立数据）
+  const [practiceSessions, setPracticeSessions] = useState<PracticeSession[]>([])
+
   const { show, node } = useToast()
 
   // 首次加载：从 localStorage 读
   useEffect(() => {
     setCards(storage.listCards())
     setSettings({ ...DEFAULT_SETTINGS, ...storage.getSettings() })
+    setPracticeSessions(storage.listPracticeSessions())
   }, [])
 
   // 选中卡片
@@ -240,6 +245,16 @@ export default function App() {
     }
     storage.saveCard(updated)
     setCards((prev) => prev.map((x) => (x.id === cardId ? updated : x)))
+  }
+
+  function handleStartPractice() {
+    setMenuOpen(false)
+    setPage('practice')
+  }
+
+  function handlePracticeFinish(updates: { cards: Card[]; sessions: PracticeSession[] }) {
+    setCards(updates.cards)
+    setPracticeSessions(updates.sessions)
   }
 
   function handleSaveSettings(s: Settings) {
@@ -553,6 +568,13 @@ export default function App() {
             />
           </div>
         </div>
+      ) : page === 'practice' ? (
+        <PracticeView
+          cards={cards}
+          sessions={practiceSessions}
+          onClose={() => setPage('home')}
+          onFinish={handlePracticeFinish}
+        />
       ) : page === 'home' ? (
         /* ---------- 首页：今日一句 ---------- */
         <HomePage
@@ -666,6 +688,7 @@ export default function App() {
       <MenuOverlay
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
+        onStartPractice={handleStartPractice}
         onOpenLibrary={() => setPage('library')}
         onOpenBackup={() => setBackupOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}

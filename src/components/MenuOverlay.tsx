@@ -4,13 +4,14 @@ import { IconClose } from './hand/HandIcon'
 interface Props {
   open: boolean
   onClose: () => void
+  onStartPractice: () => void
   onOpenLibrary: () => void
   onOpenBackup: () => void
   onOpenSettings: () => void
 }
 
-/** 右上黑点点开的全屏菜单：三项大字 */
-export function MenuOverlay({ open, onClose, onOpenLibrary, onOpenBackup, onOpenSettings }: Props) {
+/** 右上黑点点开的全屏菜单：四项大字，「练一句」置顶 */
+export function MenuOverlay({ open, onClose, onStartPractice, onOpenLibrary, onOpenBackup, onOpenSettings }: Props) {
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -23,6 +24,7 @@ export function MenuOverlay({ open, onClose, onOpenLibrary, onOpenBackup, onOpen
   if (!open) return null
 
   const items: Array<{ label: string; action: () => void }> = [
+    { label: '练一句', action: onStartPractice },
     { label: '句子库', action: onOpenLibrary },
     { label: '备份', action: onOpenBackup },
     { label: '设置', action: onOpenSettings },

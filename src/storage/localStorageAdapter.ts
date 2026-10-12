@@ -1,8 +1,9 @@
-import type { Card, Settings, StorageAdapter } from '@/types'
+import type { Card, Settings, StorageAdapter, PracticeSession, PracticeItem, PracticeStatus } from '@/types'
 import { DEFAULT_SETTINGS } from '@/types'
 
 const CARDS_KEY = 'tou-de-ban-ju:cards:v1'
 const SETTINGS_KEY = 'tou-de-ban-ju:settings:v1'
+const SESSIONS_KEY = 'tou-de-ban-ju:practice-sessions:v1'
 
 function safeParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback
@@ -11,6 +12,27 @@ function safeParse<T>(raw: string | null, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+function todayStr(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function parsePracticeStats(x: unknown): Card['practiceStats'] {
+  if (!x || typeof x !== 'object') return undefined
+  const o = x as Record<string, unknown>
+  const recalled = Number(o.recalled ?? 0)
+  const hinted = Number(o.hinted ?? 0)
+  const cant = Number(o.cant ?? 0)
+  const lastAt = typeof o.lastAt === 'number' ? o.lastAt : undefined
+  let lastStatus: 'recalled' | 'hinted' | 'cant' | undefined
+  if (o.lastStatus === 'recalled' || o.lastStatus === 'hinted' || o.lastStatus === 'cant') {
+    lastStatus = o.lastStatus
+  }
+  // 全 0 且没 lastAt 就当不存在，UI 那边就不会展示
+  if (recalled === 0 && hinted === 0 && cant === 0 && !lastAt) return undefined
+  return { recalled, hinted, cant, lastStatus, lastAt }
 }
 
 export class LocalStorageAdapter implements StorageAdapter {
@@ -41,6 +63,10 @@ export class LocalStorageAdapter implements StorageAdapter {
         lastPracticedAt: typeof x.lastPracticedAt === 'number' ? x.lastPracticedAt : undefined,
         createdAt: Number(x.createdAt ?? 0),
         updatedAt: Number(x.updatedAt ?? 0),
+        // 练一句字段（可选）
+        recallHint: typeof x.recallHint === 'string' && x.recallHint.trim() ? x.recallHint : undefined,
+        oralQuestion: typeof x.oralQuestion === 'string' && x.oralQuestion.trim() ? x.oralQuestion : undefined,
+        practiceStats: parsePracticeStats(x.practiceStats),
       }
     })
   }
@@ -74,7 +100,72 @@ export class LocalStorageAdapter implements StorageAdapter {
   saveSettings(s: Settings): void {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s))
   }
+
+  // ---------- 练习会话 ----------
+
+  listPracticeSessions(): PracticeSession[] {
+    const raw = safeParse<unknown[]>(localStorage.getItem(SESSIONS_KEY), [])
+    if (!Array.isArray(raw)) return []
+    return raw
+      .filter((s) => s && typeof s === 'object')
+      .map((s) => {
+        const o = s as Record<string, unknown>
+        const items = Array.isArray(o.items)
+          ? o.items
+              .filter((i) => i && typeof i === 'object')
+              .map((i) => {
+                const x = i as Record<string, unknown>
+                return {
+                  cardId: String(x.cardId ?? ''),
+                  status: (x.status === 'recalled' || x.status === 'hinted' || x.status === 'cant') ? x.status : 'cant',
+                  selfText: typeof x.selfText === 'string' ? x.selfText : undefined,
+                  at: Number(x.at ?? 0),
+                } as PracticeItem
+              })
+          : []
+        return {
+          date: String(o.date ?? ''),
+          startedAt: Number(o.startedAt ?? 0),
+          finishedAt: typeof o.finishedAt === 'number' ? o.finishedAt : undefined,
+          items,
+        } as PracticeSession
+      })
+      .filter((s) => s.date)
+  }
+
+  appendPracticeSessionItem(date: string, item: PracticeItem): void {
+    const all = this.listPracticeSessions()
+    let s = all.find((x) => x.date === date)
+    if (!s) {
+      s = { date, startedAt: item.at, items: [] }
+      all.push(s)
+    }
+    s.items.push(item)
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(all))
+  }
+
+  bumpPracticeStats(cardId: string, status: PracticeStatus, at: number): void {
+    const all = this.listCards()
+    const idx = all.findIndex((c) => c.id === cardId)
+    if (idx === -1) return
+    const c = all[idx]
+    const prev = c.practiceStats || { recalled: 0, hinted: 0, cant: 0 }
+    const next = {
+      recalled: prev.recalled + (status === 'recalled' ? 1 : 0),
+      hinted: prev.hinted + (status === 'hinted' ? 1 : 0),
+      cant: prev.cant + (status === 'cant' ? 1 : 0),
+      lastStatus: status,
+      lastAt: at,
+    }
+    all[idx] = { ...c, practiceStats: next, lastPracticedAt: at, updatedAt: at }
+    localStorage.setItem(CARDS_KEY, JSON.stringify(all))
+  }
 }
 
 // 单例：UI 层直接用这一个
 export const storage: StorageAdapter = new LocalStorageAdapter()
+
+// 工具：今天日期字符串（YYYY-MM-DD），UI 也要用，导出避免重复实现
+export function todayKey(): string {
+  return todayStr()
+}
