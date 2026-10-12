@@ -1,0 +1,20 @@
+# dependencies
+node_modules
+
+# build output
+dist
+dist-ssr
+
+# cache
+.vite
+*.tsbuildinfo
+
+# editor / OS
+.DS_Store
+*.log
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# agent working memory (not part of the app source)
+.workbuddy
