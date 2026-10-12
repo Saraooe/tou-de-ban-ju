@@ -73,10 +73,21 @@ export default function App() {
     hintTopic: string
     result: import('@/services/deepseek').AnalyzeResult
   }) {
+    if (input.result.error) {
+      show(`AI 没接住：${input.result.error}`)
+      return
+    }
+    // 如果 AI 修正了转写，自动用修正后的版本作为原句
+    const finalOriginal =
+      input.result.corrected && input.result.corrected !== input.original
+        ? input.result.corrected
+        : input.result.picked || input.original
+    const wasFixed = finalOriginal !== input.original
     setDraft({
-      original: input.original,
+      original: finalOriginal,
       sourceLink: input.sourceLink,
       topic: input.hintTopic || (input.result.suggestedTopics[0] ?? ''),
+      meaning: input.result.meaning,
       skeleton: input.result.skeleton,
       scenarios: input.result.scenarios,
       tone: input.result.tone,
@@ -84,7 +95,7 @@ export default function App() {
       examples: input.result.examples,
       suggestedTopics: input.result.suggestedTopics,
     })
-    show('AI 拆解完成，可以再调一调然后保存。')
+    show(wasFixed ? 'AI 拆解完成，原句已自动修正。' : 'AI 拆解完成，可以再调一调然后保存。')
   }
 
   function handleChangeDraft(next: DraftPayload) {
@@ -167,6 +178,7 @@ export default function App() {
         hasApiKey={!!settings.apiKey}
         loading={loadingAI}
         setLoading={setLoadingAI}
+        existingTopics={knownTopics}
       />
 
       {/* 桌面三栏 / 移动端单栏 */}

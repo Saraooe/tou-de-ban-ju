@@ -15,7 +15,28 @@ function safeParse<T>(raw: string | null, fallback: T): T {
 
 export class LocalStorageAdapter implements StorageAdapter {
   listCards(): Card[] {
-    return safeParse<Card[]>(localStorage.getItem(CARDS_KEY), [])
+    const raw = safeParse<unknown[]>(localStorage.getItem(CARDS_KEY), [])
+    // 兜底：老数据缺字段时填默认值，避免 undefined 串到 UI
+    return raw.map((c) => {
+      const x = (c && typeof c === 'object' ? c : {}) as Record<string, unknown>
+      return {
+        id: String(x.id ?? ''),
+        original: String(x.original ?? ''),
+        sourceLink: typeof x.sourceLink === 'string' ? x.sourceLink : undefined,
+        topic: String(x.topic ?? ''),
+        meaning: typeof x.meaning === 'string' ? x.meaning : '',
+        skeleton: String(x.skeleton ?? ''),
+        scenarios: Array.isArray(x.scenarios) ? x.scenarios.map((s) => String(s)) : [],
+        tone: String(x.tone ?? ''),
+        avoid: String(x.avoid ?? ''),
+        examples: Array.isArray(x.examples) ? x.examples.map((s) => String(s)) : [],
+        suggestedTopics: Array.isArray(x.suggestedTopics) ? x.suggestedTopics.map((s) => String(s)) : undefined,
+        useCount: Number(x.useCount ?? 0),
+        lastPracticedAt: typeof x.lastPracticedAt === 'number' ? x.lastPracticedAt : undefined,
+        createdAt: Number(x.createdAt ?? 0),
+        updatedAt: Number(x.updatedAt ?? 0),
+      }
+    })
   }
 
   getCard(id: string): Card | null {

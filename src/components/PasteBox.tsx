@@ -13,6 +13,7 @@ interface Props {
   hasApiKey: boolean
   loading: boolean
   setLoading: (b: boolean) => void
+  existingTopics: string[]
 }
 
 export function PasteBox({
@@ -22,6 +23,7 @@ export function PasteBox({
   hasApiKey,
   loading,
   setLoading,
+  existingTopics,
 }: Props) {
   const [text, setText] = useState('')
   const [link, setLink] = useState('')
@@ -44,7 +46,7 @@ export function PasteBox({
       const { analyzeSentence } = await import('@/services/deepseek')
       const { storage } = await import('@/storage/localStorageAdapter')
       const settings = storage.getSettings()
-      const result = await analyzeSentence(original, topic, settings)
+      const result = await analyzeSentence(original, topic, existingTopics, settings)
       onGenerate({ original, sourceLink: link.trim(), hintTopic: topic.trim(), result })
       // 清空粘贴框
       setText('')

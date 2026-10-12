@@ -230,6 +230,16 @@ function Editor({
             rows={2}
           />
         </div>
+        <div>
+          <label className="ink-label">释义（一句话中文，实际含义）</label>
+          <textarea
+            className="ink-input text-sm"
+            value={value.meaning}
+            onChange={(e) => onUpdate('meaning', e.target.value)}
+            rows={2}
+            placeholder="比如：想说『我早就想去试试了』，带一点早就想但一直没动的语气"
+          />
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="ink-label">主题</label>
@@ -368,6 +378,12 @@ function DetailBody({ card }: { card: Card }) {
         >
           来源 ↗
         </a>
+      ) : null}
+
+      {card.meaning ? (
+        <Section title="释义">
+          <p className="text-base text-ink-900">{card.meaning}</p>
+        </Section>
       ) : null}
 
       <Section title="句型骨架">

@@ -4,35 +4,73 @@ import type { Settings } from '@/types'
 // 返回的字段是「草案」，用户保存前仍可手改。
 
 export interface AnalyzeResult {
-  skeleton: string
-  scenarios: string[]
-  tone: string
-  avoid: string
-  examples: string[]
-  suggestedTopics: string[]
+  picked: string              // AI 实际拆解的那一句（多句时只取一句）
+  corrected: string           // 修正转写错误之后的版本
+  meaning: string             // 一句话中文释义（实际含义，不是逐字翻译）
+  skeleton: string            // 句型骨架，用 ___ 标出可替换部分；兜底为 corrected
+  scenarios: string[]         // 什么时候用（2-3 个）
+  tone: string                // 语气/场合
+  avoid: string               // 哪些场合别用
+  examples: string[]          // 3 个仿写句
+  suggestedTopics: string[]   // 建议主题，优先复用已有主题
+  error?: string              // 输入无法拆解时，存错误原因
 }
 
-const SYSTEM_PROMPT = `你是一名给中文母语英语学习者用的「口语拆解助手」。用户会给你一句从 TikTok / Instagram / 美剧字幕里看到的英文表达，你要把它拆成结构化字段，便于用户学习与复习。
+const SYSTEM_PROMPT = `你是一名给中文母语英语学习者用的「口语拆解助手」。用户会从 TikTok / Instagram / 美剧字幕里抄英文表达，你把它拆成结构化字段。
 
-要求：
-1. 严格按 JSON 输出，不要任何 markdown 代码块、不要任何解释、不要任何前后缀。
-2. JSON 字段：
-   - "skeleton": 句型骨架，把可替换的部分用三个下划线 "___" 标出，例如 "I've been meaning to ___"、"That's a ___ way to put it"、"lowkey ___"
-   - "scenarios": 字符串数组，2-3 条中文短句，写明"什么时候用"，例如 ["回应朋友推荐时", "想表达自己一直想做某事"]
-   - "tone": 中文短语，描述语气/语域，可多值用顿号分隔，例如 "口语、随意、朋友间"、"偏正式、新闻/书面"、"俚语、年轻人社交"
-   - "avoid": 中文短语，描述不适合用的场合；如无特别禁忌，给空字符串 ""
-   - "examples": 字符串数组，3 条用同样骨架的仿写英文句子，每条不一样；填入的部分要具体、可信
-   - "suggestedTopics": 字符串数组，1-3 个简短主题标签，中英文都可以，例 ["社交寒暄", "casual plans", "反馈"]
-3. 不要输出"original"字段，原句由前端自己保存。
-4. 只输出 JSON 对象本体。`
+【输入特征】
+用户粘贴的可能是：
+- 单一英文句子（最常见）
+- 字幕片段：多句英文混在一起，可能有 [Music] / [Applause] 这类噪音
+- 带转写错误：自动字幕常把 "I've" 写成 "Ive"、"gonna" 写成 "gonna" 等
+- 中英混杂：可能附带中文说明或表情符号
+
+【你的任务】
+先判断要学哪一句、再修正、再拆解。严格按 JSON 输出，不要任何 markdown 代码块、不要任何前后缀解释。
+
+【已有主题（必须优先复用）】
+<existing_topics>
+__EXISTING_TOPICS__
+</existing_topics>
+
+规则：
+1. 如果输入含多句英文，只拆「最有学习价值」的那一句（最地道、最能套用的），把选中的原句放到 "picked"。
+2. 如果原句有明显的转写错误，先在 "corrected" 给出修正版本，再拆解；如果没错误，"corrected" 等于 "picked"。
+3. "suggestedTopics" 必须是 1-3 个主题标签：
+   - 优先从 <existing_topics> 里挑最贴合的（按相关度从高到低排）
+   - 只有当已有主题全部不贴时，才新建
+   - 主题用 1-3 个词，中英文都可，统一小写优先
+4. 如果输入不是英文，或完全无法拆成可学习表达（如纯乱码、纯中文、纯噪音），返回 {"error": "简短中文原因"}，不要其它字段。
+5. 字段定义：
+   - "picked": 选中拆解的那一句原句
+   - "corrected": 修正后的原句
+   - "meaning": 一句中文大白话，说明这个表达在真实场景里到底什么意思、传递什么情绪（不是逐字翻译）
+   - "skeleton": 句型骨架，可替换部分用 "___" 标出（如 "I've been meaning to ___"）。必须至少含一个 "___"。如果整句是固定表达无法套用，用 "corrected" 本身
+   - "scenarios": 字符串数组，2-3 条中文短句写"什么时候用"
+   - "tone": 中文短语描述语气/语域
+   - "avoid": 中文短语写不适合的场合；无则给 ""
+   - "examples": 字符串数组，3 条用同样骨架的仿写英文，填入部分要具体可信
+6. 只输出 JSON 对象本体。
+
+【示例】
+输入（原句带转写错误）："Ive been meaning to try that place"
+输出：
+{"picked":"Ive been meaning to try that place","corrected":"I've been meaning to try that place","meaning":"想说『我早就想去试试了』，带一点早就想但一直没动的语气","skeleton":"I've been meaning to ___","scenarios":["朋友推荐了一家店但你一直没去","被问最近有没有想做某事"],"tone":"口语、随意、朋友间","avoid":"","examples":["I've been meaning to call her back.","I've been meaning to read that book.","I've been meaning to fix the kitchen sink."],"suggestedTopics":["casual plans","社交寒暄"]}`
+
+function buildSystemPrompt(existingTopics: string[]): string {
+  const block = existingTopics.length > 0 ? existingTopics.map((t) => `- ${t}`).join('\n') : '(空，用户的第一个卡片)'
+  return SYSTEM_PROMPT.replace('__EXISTING_TOPICS__', block)
+}
 
 function buildUserPrompt(original: string, hintTopic?: string): string {
-  const topic = hintTopic?.trim()
-  return `原句："${original}"${topic ? `\n用户自选主题（仅参考，可被改）：${topic}` : ''}`
+  // 用 JSON.stringify 安全包裹，避免原句里的引号/换行破坏格式
+  const obj: { text: string; hintTopic?: string } = { text: original }
+  const trimmedHint = hintTopic?.trim()
+  if (trimmedHint) obj.hintTopic = trimmedHint
+  return JSON.stringify(obj)
 }
 
 function extractJson(text: string): string {
-  // 模型偶尔会包 ```json ``` 或前后加闲话，做一次鲁棒剥离
   const trimmed = text.trim()
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) return trimmed
   const m = trimmed.match(/\{[\s\S]*\}/)
@@ -40,16 +78,37 @@ function extractJson(text: string): string {
   throw new Error('模型返回的不是 JSON')
 }
 
-function normalize(raw: unknown): AnalyzeResult {
-  // 兼容模型返回结构小差异，确保字段齐全且类型正确
+function normalize(raw: unknown, fallbackOriginal: string): AnalyzeResult {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
   const arr = (v: unknown): string[] =>
     Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []
-  const str = (v: unknown, def = ''): string => (typeof v === 'string' ? v.trim() : def)
+  const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+
+  if (typeof r.error === 'string' && r.error.trim()) {
+    return {
+      picked: fallbackOriginal,
+      corrected: fallbackOriginal,
+      meaning: '',
+      skeleton: fallbackOriginal,
+      scenarios: [],
+      tone: '',
+      avoid: '',
+      examples: [],
+      suggestedTopics: [],
+      error: r.error.trim(),
+    }
+  }
+
+  const picked = str(r.picked) || fallbackOriginal
+  const corrected = str(r.corrected) || picked
+  const skeleton = str(r.skeleton) || corrected // 兜底：模型没给骨架时用修正后的原句
   return {
-    skeleton: str(r.skeleton) || '___',
+    picked,
+    corrected,
+    meaning: str(r.meaning),
+    skeleton,
     scenarios: arr(r.scenarios).slice(0, 3),
-    tone: str(r.tone) || '口语',
+    tone: str(r.tone),
     avoid: str(r.avoid),
     examples: arr(r.examples).slice(0, 3),
     suggestedTopics: arr(r.suggestedTopics).slice(0, 3),
@@ -59,6 +118,7 @@ function normalize(raw: unknown): AnalyzeResult {
 export async function analyzeSentence(
   original: string,
   hintTopic: string | undefined,
+  existingTopics: string[],
   settings: Settings,
 ): Promise<AnalyzeResult> {
   if (!settings.apiKey) {
@@ -76,7 +136,7 @@ export async function analyzeSentence(
       temperature: 0.5,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt(existingTopics) },
         { role: 'user', content: buildUserPrompt(original, hintTopic) },
       ],
     }),
@@ -92,5 +152,5 @@ export async function analyzeSentence(
   if (!content) throw new Error('模型未返回内容')
   const jsonText = extractJson(content)
   const parsed: unknown = JSON.parse(jsonText)
-  return normalize(parsed)
+  return normalize(parsed, original)
 }

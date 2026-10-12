@@ -6,6 +6,7 @@ export interface Card {
   original: string          // 原句
   sourceLink?: string       // 可选来源链接
   topic: string             // 主题
+  meaning: string           // 一句话中文释义（实际含义，不是逐字翻译）
   skeleton: string          // 句型骨架，用 ___ 标出可替换位置
   scenarios: string[]       // 什么时候用（2-3 个场景描述）
   tone: string              // 语气/场合：口语 / 俚语 / 随意 / 偏正式 等
