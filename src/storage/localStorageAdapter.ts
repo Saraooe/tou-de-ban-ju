@@ -30,7 +30,13 @@ export class LocalStorageAdapter implements StorageAdapter {
         tone: String(x.tone ?? ''),
         avoid: String(x.avoid ?? ''),
         examples: Array.isArray(x.examples) ? x.examples.map((s) => String(s)) : [],
+        sourceContext: typeof x.sourceContext === 'string' && x.sourceContext.trim() ? x.sourceContext : undefined,
         suggestedTopics: Array.isArray(x.suggestedTopics) ? x.suggestedTopics.map((s) => String(s)) : undefined,
+        usages: Array.isArray(x.usages)
+          ? x.usages
+              .filter((u) => u && typeof u === 'object')
+              .map((u) => ({ text: String((u as Record<string, unknown>).text ?? ''), at: Number((u as Record<string, unknown>).at ?? 0) }))
+          : undefined,
         useCount: Number(x.useCount ?? 0),
         lastPracticedAt: typeof x.lastPracticedAt === 'number' ? x.lastPracticedAt : undefined,
         createdAt: Number(x.createdAt ?? 0),
@@ -55,6 +61,10 @@ export class LocalStorageAdapter implements StorageAdapter {
   deleteCard(id: string): void {
     const all = this.listCards().filter((c) => c.id !== id)
     localStorage.setItem(CARDS_KEY, JSON.stringify(all))
+  }
+
+  replaceAllCards(cards: Card[]): void {
+    localStorage.setItem(CARDS_KEY, JSON.stringify(cards))
   }
 
   getSettings(): Settings {

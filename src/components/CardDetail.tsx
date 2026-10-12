@@ -5,9 +5,25 @@ import { EmptyState } from './EmptyState'
 
 export type DraftPayload = Omit<Card, 'id' | 'createdAt' | 'updatedAt' | 'useCount' | 'lastPracticedAt'>
 
+// 待保存队列的展示信息（一次拆解多句时用）
+export interface DraftQueueInfo {
+  index: number          // 0-based
+  total: number
+  status: 'loading' | 'ready' | 'failed'
+  error?: string
+  pendingCount: number   // 队列里还在拆解的句数
+  onPrev: () => void
+  onNext: () => void
+  onSkip: () => void
+  onSaveAll: () => void
+  onRetry: () => void
+  onDiscard: () => void
+}
+
 interface Props {
   selected: Card | null
   draft: DraftPayload | null // AI 生成的草稿
+  queue?: DraftQueueInfo | null
   onChangeDraft: (next: DraftPayload) => void
   onSaveDraft: () => void
   onCancelDraft: () => void
@@ -20,6 +36,7 @@ interface Props {
 export function CardDetail({
   selected,
   draft,
+  queue,
   onChangeDraft,
   onSaveDraft,
   onCancelDraft,
@@ -28,6 +45,38 @@ export function CardDetail({
   onClose,
   knownTopics,
 }: Props) {
+  // 待保存队列：逐张展示草稿
+  if (queue) {
+    return (
+      <div className="flex h-full flex-col">
+        <QueueBar queue={queue} />
+        {queue.status === 'failed' ? <FailureBanner queue={queue} /> : null}
+        {queue.status === 'loading' || !draft ? (
+          <div className="flex flex-1 items-center justify-center p-6 text-center">
+            <p className="text-sm text-ink-500">
+              <span className="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-300 border-t-ink-900 align-[-2px]" />
+              AI 正在拆解这一句…
+            </p>
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1">
+            <DraftEditor
+              draft={draft}
+              knownTopics={knownTopics}
+              onChange={onChangeDraft}
+              onSave={onSaveDraft}
+              onCancel={queue.onDiscard}
+              cancelLabel="放弃这一批"
+              title={`新卡片（待保存 · 第 ${queue.index + 1} / ${queue.total} 张）`}
+              subtitle="改完点「保存这张」，或者用上面的「全部保存」一次存完。"
+              primaryLabel="保存这张"
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (draft) {
     return (
       <DraftEditor
@@ -61,6 +110,60 @@ export function CardDetail({
   )
 }
 
+// ---------- 待保存队列：顶部导航 ----------
+
+function QueueBar({ queue }: { queue: DraftQueueInfo }) {
+  return (
+    <div className="border-b border-ink-200 bg-ink-50/70 px-4 py-2.5 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs text-ink-600">
+          <span className="font-semibold text-ink-900">
+            第 {queue.index + 1} / {queue.total} 张
+          </span>
+          {queue.pendingCount > 0 ? (
+            <span className="ml-2">还有 {queue.pendingCount} 句在拆解…</span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            className="ink-btn-outline text-xs"
+            onClick={queue.onPrev}
+            disabled={queue.index === 0}
+          >
+            上一张
+          </button>
+          <button
+            className="ink-btn-outline text-xs"
+            onClick={queue.onNext}
+            disabled={queue.index >= queue.total - 1}
+          >
+            下一张
+          </button>
+          <button className="ink-btn-ghost text-xs" onClick={queue.onSkip}>
+            跳过
+          </button>
+          <button className="ink-btn-outline text-xs" onClick={queue.onSaveAll}>
+            全部保存
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FailureBanner({ queue }: { queue: DraftQueueInfo }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700 sm:px-5">
+      <span className="min-w-0 flex-1">
+        拆解失败：{queue.error || '未知原因'}。可以直接在下面手动填。
+      </span>
+      <button className="ink-btn-outline shrink-0 text-xs" onClick={queue.onRetry}>
+        点此重试
+      </button>
+    </div>
+  )
+}
+
 // ---------- 草稿编辑器（AI 生成后的卡片） ----------
 
 function DraftEditor({
@@ -69,21 +172,30 @@ function DraftEditor({
   onChange,
   onSave,
   onCancel,
+  cancelLabel,
+  title = '新卡片（待保存）',
+  subtitle = '所有字段都可以再改；改完点「保存到句子库」才进库。',
+  primaryLabel = '保存到句子库',
 }: {
   draft: DraftPayload
   knownTopics: string[]
   onChange: (next: DraftPayload) => void
   onSave: () => void
   onCancel: () => void
+  cancelLabel?: string
+  title?: string
+  subtitle?: string
+  primaryLabel?: string
 }) {
   return (
     <Editor
-      title="新卡片（待保存）"
-      subtitle="所有字段都可以再改；改完点「保存到句子库」才进库。"
+      title={title}
+      subtitle={subtitle}
       value={draft}
       knownTopics={knownTopics}
       onSave={onSave}
       onCancel={onCancel}
+      cancelLabel={cancelLabel}
       onUpdate={(k, v) => onChange({ ...draft, [k]: v })}
       onUpdateArr={(key, idx, val) => {
         const next = [...draft[key]]
@@ -94,7 +206,7 @@ function DraftEditor({
       onRemoveArr={(key, idx) =>
         onChange({ ...draft, [key]: draft[key].filter((_, i) => i !== idx) })
       }
-      primaryLabel="保存到句子库"
+      primaryLabel={primaryLabel}
     />
   )
 }
@@ -190,6 +302,7 @@ function Editor({
   knownTopics,
   onSave,
   onCancel,
+  cancelLabel = '取消',
   onUpdate,
   onUpdateArr,
   onAddArr,
@@ -202,6 +315,7 @@ function Editor({
   knownTopics: string[]
   onSave: () => void
   onCancel: () => void
+  cancelLabel?: string
   onUpdate: <K extends keyof DraftPayload>(k: K, v: DraftPayload[K]) => void
   onUpdateArr: (k: 'scenarios' | 'examples', i: number, v: string) => void
   onAddArr: (k: 'scenarios' | 'examples') => void
@@ -216,7 +330,7 @@ function Editor({
           <p className="mt-0.5 text-xs text-ink-500">{subtitle}</p>
         </div>
         <div className="flex gap-1">
-          <button className="ink-btn-ghost" onClick={onCancel}>取消</button>
+          <button className="ink-btn-ghost" onClick={onCancel}>{cancelLabel}</button>
           <button className="ink-btn-primary" onClick={onSave}>{primaryLabel}</button>
         </div>
       </div>
@@ -423,6 +537,32 @@ function DetailBody({ card }: { card: Card }) {
         )}
       </Section>
 
+      {card.sourceContext ? (
+        <details className="rounded-lg border border-ink-200 bg-ink-50/70 p-3">
+          <summary className="cursor-pointer select-none text-xs text-ink-600">
+            出处上下文（点开看这句在原文里的位置）
+          </summary>
+          <p className="mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap font-serif text-sm leading-relaxed text-ink-600">
+            <ContextWithHighlight context={card.sourceContext} sentence={card.original} />
+          </p>
+        </details>
+      ) : null}
+
+      {card.usages && card.usages.length > 0 ? (
+        <Section title={`练习记录（${card.usages.length} 次）`}>
+          <ul className="space-y-2">
+            {card.usages.map((u, i) => (
+              <li key={i} className="rounded-lg border border-ink-200 bg-white p-2.5">
+                <p className="font-serif text-sm text-ink-800">{u.text}</p>
+                <p className="mt-1 text-[10px] text-ink-400">
+                  {new Date(u.at).toLocaleString('zh-CN')}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
       <div className="pt-2 text-xs text-ink-400">
         创建于 {new Date(card.createdAt).toLocaleString('zh-CN')}
         {card.lastPracticedAt
@@ -439,6 +579,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h4 className="ink-label">{title}</h4>
       <div className="rounded-lg bg-ink-50/70 p-3">{children}</div>
     </div>
+  )
+}
+
+// 出处上下文里把当前句子高亮出来
+function ContextWithHighlight({ context, sentence }: { context: string; sentence: string }) {
+  const s = sentence.trim()
+  const idx = s ? context.toLowerCase().indexOf(s.toLowerCase()) : -1
+  if (idx === -1) return <>{context}</>
+  return (
+    <>
+      {context.slice(0, idx)}
+      <mark className="rounded bg-ink-900/10 px-0.5 font-medium text-ink-900">
+        {context.slice(idx, idx + s.length)}
+      </mark>
+      {context.slice(idx + s.length)}
+    </>
   )
 }
 

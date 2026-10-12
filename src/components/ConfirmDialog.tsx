@@ -54,6 +54,57 @@ export function ConfirmDialog({
   )
 }
 
+interface DuplicateProps {
+  open: boolean
+  sentence: string
+  onViewExisting: () => void
+  onSaveAnyway: () => void
+  onCancel: () => void
+}
+
+/** 保存前发现原句重复：给「查看已有卡片」和「仍然保存」两条路 */
+export function DuplicateDialog({
+  open,
+  sentence,
+  onViewExisting,
+  onSaveAnyway,
+  onCancel,
+}: DuplicateProps) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onCancel])
+
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-ink-900/30 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-md rounded-2xl border border-ink-200 bg-white p-6 shadow-xl">
+        <h3 className="text-lg font-semibold text-ink-900">这句已经存过了</h3>
+        <p className="mt-2 break-words font-serif text-sm text-ink-700">{sentence}</p>
+        <p className="mt-2 text-xs text-ink-500">
+          句子库里已经有同样的一句（忽略大小写和多余空格）。要看那张卡片，还是再存一张？
+        </p>
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <button className="ink-btn-ghost" onClick={onCancel}>
+            取消
+          </button>
+          <button className="ink-btn-outline" onClick={onViewExisting}>
+            查看已有卡片
+          </button>
+          <button className="ink-btn-primary" onClick={onSaveAnyway}>
+            仍然保存
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // 简单 toast（用于"已保存"等反馈，3 秒自动消失）
 export function useToast() {
   const [msg, setMsg] = useState<string | null>(null)

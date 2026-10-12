@@ -34,7 +34,7 @@ export function CardList({
 
   const filtered = useMemo(() => {
     let list = cards
-    if (selectedTopic) list = list.filter((c) => (c.topic || '未分类') === selectedTopic)
+    if (selectedTopic) list = list.filter((c) => (c.topic?.trim() || '未分类') === selectedTopic)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       list = list.filter(

@@ -1,10 +1,11 @@
 interface Props {
   onOpenSettings: () => void
   onOpenPractice: () => void
+  onOpenBackup: () => void
   totalCards: number
 }
 
-export function Header({ onOpenSettings, onOpenPractice, totalCards }: Props) {
+export function Header({ onOpenSettings, onOpenPractice, onOpenBackup, totalCards }: Props) {
   return (
     <header className="sticky top-0 z-30 border-b border-ink-200 bg-ink-50/85 backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -19,6 +20,10 @@ export function Header({ onOpenSettings, onOpenPractice, totalCards }: Props) {
           <button className="ink-btn-outline" onClick={onOpenPractice} title="今日练习">
             <span>🎯</span>
             <span className="hidden sm:inline">今日练习</span>
+          </button>
+          <button className="ink-btn-ghost" onClick={onOpenBackup} title="备份">
+            <span>💾</span>
+            <span className="hidden sm:inline">备份</span>
           </button>
           <button className="ink-btn-ghost" onClick={onOpenSettings} title="设置">
             <span>⚙</span>

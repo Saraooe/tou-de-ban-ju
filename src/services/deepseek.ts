@@ -1,7 +1,8 @@
 import type { Settings } from '@/types'
 
-// 调用大模型把一句英文拆成结构化字段。
-// 返回的字段是「草案」，用户保存前仍可手改。
+// 调用大模型的公共层 + 两个业务函数：
+// - analyzeSentence：把一句英文拆成结构化字段
+// - extractHighlights：从一大段内容里挑出值得学的句子
 
 export interface AnalyzeResult {
   picked: string              // AI 实际拆解的那一句（多句时只取一句）
@@ -15,6 +16,80 @@ export interface AnalyzeResult {
   suggestedTopics: string[]   // 建议主题，优先复用已有主题
   error?: string              // 输入无法拆解时，存错误原因
 }
+
+export interface Highlight {
+  sentence: string   // 候选句子原文（如有明显转写错误，已修正）
+  reason: string    // 中文一句话：为什么值得学
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user'
+  content: string
+}
+
+// ---------- 公共请求层 ----------
+
+async function callDeepSeek(
+  messages: ChatMessage[],
+  settings: Settings,
+  opts?: { temperature?: number; maxTokens?: number },
+): Promise<unknown> {
+  if (!settings.apiKey) {
+    throw new Error('未填写 API Key：请在「设置」中填入 DeepSeek API Key。')
+  }
+  // 兜底：settings 可能缺 apiBase/model（旧数据或未保存过设置）
+  const base = (settings.apiBase || 'https://api.deepseek.com/v1').replace(/\/+$/, '')
+  const model = settings.model || 'deepseek-chat'
+
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), 30_000)
+  let resp: Response
+  try {
+    resp = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: opts?.temperature ?? 0.5,
+        max_tokens: opts?.maxTokens ?? 2048,
+        response_format: { type: 'json_object' },
+        messages,
+      }),
+      signal: controller.signal,
+    })
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error('请求超时（30 秒），请重试。')
+    }
+    throw new Error('网络请求失败，可能是断网或浏览器跨域限制。')
+  } finally {
+    window.clearTimeout(timer)
+  }
+
+  if (!resp.ok) {
+    if (resp.status === 401) throw new Error('API Key 无效，请到「设置」里检查。')
+    if (resp.status === 429) throw new Error('请求太频繁了，稍等几秒再试。')
+    if (resp.status >= 500) throw new Error('DeepSeek 服务繁忙，稍后再试。')
+    const errText = await resp.text().catch(() => '')
+    throw new Error(`API 调用失败 (${resp.status})：${errText.slice(0, 200) || resp.statusText}`)
+  }
+
+  const data = (await resp.json()) as {
+    choices?: { message?: { content?: string } }[]
+  }
+  const content = data.choices?.[0]?.message?.content
+  if (!content) throw new Error('模型未返回内容')
+  try {
+    return JSON.parse(extractJson(content))
+  } catch {
+    throw new Error('模型返回内容无法解析，请重试。')
+  }
+}
+
+// ---------- 单句拆解 ----------
 
 const SYSTEM_PROMPT = `你是一名给中文母语英语学习者用的「口语拆解助手」。用户会从 TikTok / Instagram / 美剧字幕里抄英文表达，你把它拆成结构化字段。
 
@@ -62,11 +137,13 @@ function buildSystemPrompt(existingTopics: string[]): string {
   return SYSTEM_PROMPT.replace('__EXISTING_TOPICS__', block)
 }
 
-function buildUserPrompt(original: string, hintTopic?: string): string {
+function buildUserPrompt(original: string, hintTopic?: string, context?: string): string {
   // 用 JSON.stringify 安全包裹，避免原句里的引号/换行破坏格式
-  const obj: { text: string; hintTopic?: string } = { text: original }
+  const obj: { text: string; hintTopic?: string; context?: string } = { text: original }
   const trimmedHint = hintTopic?.trim()
   if (trimmedHint) obj.hintTopic = trimmedHint
+  const trimmedContext = context?.trim().slice(0, 600)
+  if (trimmedContext) obj.context = trimmedContext
   return JSON.stringify(obj)
 }
 
@@ -120,37 +197,83 @@ export async function analyzeSentence(
   hintTopic: string | undefined,
   existingTopics: string[],
   settings: Settings,
+  context?: string,
 ): Promise<AnalyzeResult> {
-  if (!settings.apiKey) {
-    throw new Error('未填写 API Key：请在「设置」中填入 DeepSeek API Key。')
+  const raw = await callDeepSeek(
+    [
+      { role: 'system', content: buildSystemPrompt(existingTopics) },
+      { role: 'user', content: buildUserPrompt(original, hintTopic, context) },
+    ],
+    settings,
+  )
+  return normalize(raw, original)
+}
+
+// ---------- 挑亮点 ----------
+
+const HIGHLIGHT_SYSTEM_PROMPT = `你是一名给中文母语英语学习者用的「口语素材筛选助手」。用户会粘贴一段英文口语内容（可能是 TikTok 字幕或口播转写，有错字、标点缺失、多句连在一起），你从中挑出最值得学的句子。
+
+严格按 JSON 输出，不要任何 markdown 代码块、不要任何前后缀解释。
+
+【挑选标准】
+挑 3-5 句「最值得偷来用」的句子：
+- 地道的口语表达
+- 有可迁移的句型（换个词就能用在别处）
+- 日常对话里高频可用
+- 有趣、有个性
+
+避免选这些：
+- 只有专有名词或事实信息的句子（如人名、地名、数字）
+- 过于简单的句子（如 "Yes, I do."）
+- 纯背景铺垫、没有表达价值的句子
+
+【输出格式】
+{"highlights": [{"sentence": "候选句子", "reason": "一句中文说明学点"}]}
+
+规则：
+1. 每句必须原样来自输入，只允许修正明显的转写错误（拼写、断句），不要改写或润色。
+2. 如果一整句很长，截取其中最有学习价值的、语义完整的部分。
+3. reason 用一句中文说明学点是什么，例如"用 lowkey 表达委婉的偏好"。
+4. 如果输入不是英文或没有值得学的内容，返回 {"highlights": [], "error": "简短中文原因"}。
+5. 只输出 JSON 对象本体。`
+
+export async function extractHighlights(
+  passage: string,
+  settings: Settings,
+  exclude: string[] = [],
+): Promise<Highlight[]> {
+  let userContent = JSON.stringify(passage)
+  if (exclude.length > 0) {
+    userContent += '\n以下句子已经出现过，不要重复：' + JSON.stringify(exclude)
   }
-  const base = settings.apiBase.replace(/\/+$/, '')
-  const resp = await fetch(`${base}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: settings.model,
-      temperature: 0.5,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildSystemPrompt(existingTopics) },
-        { role: 'user', content: buildUserPrompt(original, hintTopic) },
-      ],
-    }),
-  })
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => '')
-    throw new Error(`API 调用失败 (${resp.status})：${errText.slice(0, 200) || resp.statusText}`)
+  const raw = await callDeepSeek(
+    [
+      { role: 'system', content: HIGHLIGHT_SYSTEM_PROMPT },
+      { role: 'user', content: userContent },
+    ],
+    settings,
+    { temperature: 0.3, maxTokens: 1500 },
+  )
+  const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
+
+  if (typeof r.error === 'string' && r.error.trim()) {
+    throw new Error(r.error.trim())
   }
-  const data = (await resp.json()) as {
-    choices?: { message?: { content?: string } }[]
+
+  // 校验：丢弃缺字段的项、去重（含与 exclude 重复）、最多 5 条
+  const seen = new Set(exclude.map((s) => s.trim().toLowerCase()))
+  const out: Highlight[] = []
+  const list = Array.isArray(r.highlights) ? r.highlights : []
+  for (const item of list) {
+    const x = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+    const sentence = typeof x.sentence === 'string' ? x.sentence.trim() : ''
+    const reason = typeof x.reason === 'string' ? x.reason.trim() : ''
+    if (!sentence || !reason) continue
+    const key = sentence.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ sentence, reason })
+    if (out.length >= 5) break
   }
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('模型未返回内容')
-  const jsonText = extractJson(content)
-  const parsed: unknown = JSON.parse(jsonText)
-  return normalize(parsed, original)
+  return out
 }

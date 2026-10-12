@@ -1,6 +1,11 @@
 // 核心数据模型与接口
 // 设计原则：存储层接口与实现分离，未来可换 IndexedDB 或后端，UI 层无需改。
 
+export interface CardUsage {
+  text: string   // 练习时写的回答
+  at: number     // 时间戳
+}
+
 export interface Card {
   id: string
   original: string          // 原句
@@ -12,7 +17,9 @@ export interface Card {
   tone: string              // 语气/场合：口语 / 俚语 / 随意 / 偏正式 等
   avoid: string             // 哪些场合别用
   examples: string[]        // 3 个仿写句
+  sourceContext?: string    // 这句话所在的原段落（最多 600 字符），可选，旧数据没有也能用
   suggestedTopics?: string[]// AI 给出的建议主题
+  usages?: CardUsage[]      // 练习记录（自己写的回答）
   useCount: number          // 被"我用上了"过的次数
   lastPracticedAt?: number  // 上次练习时间（毫秒时间戳）
   createdAt: number         // 创建时间
@@ -39,6 +46,14 @@ export interface StorageAdapter {
   getCard(id: string): Card | null
   saveCard(card: Card): void
   deleteCard(id: string): void
+  replaceAllCards(cards: Card[]): void
   getSettings(): Settings
   saveSettings(s: Settings): void
+}
+
+// 备份文件结构（导出/导入用）
+export interface BackupData {
+  version: 1
+  exportedAt: string
+  cards: Card[]
 }
