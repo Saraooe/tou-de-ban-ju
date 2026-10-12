@@ -4,7 +4,6 @@ import { DEFAULT_SETTINGS } from '@/types'
 import { storage } from '@/storage/localStorageAdapter'
 import { analyzeSentence, type AnalyzeResult } from '@/services/deepseek'
 import { normalizeOriginal, stripNoise } from '@/utils/text'
-import { Header } from '@/components/Header'
 import { PasteBox } from '@/components/PasteBox'
 import { CardList } from '@/components/CardList'
 import {
@@ -14,7 +13,10 @@ import {
   type DraftQueueInfo,
 } from '@/components/CardDetail'
 import { HighlightPicker } from '@/components/HighlightPicker'
-import { PracticeView } from '@/components/PracticeView'
+import { HomePage } from '@/components/HomePage'
+import { TopBar } from '@/components/TopBar'
+import { MenuOverlay } from '@/components/MenuOverlay'
+import { IconArrowLeft } from '@/components/hand/HandIcon'
 import { SettingsModal } from '@/components/SettingsModal'
 import { BackupModal } from '@/components/BackupModal'
 import { useToast } from '@/components/ConfirmDialog'
@@ -79,12 +81,13 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   // UI 状态
+  const [page, setPage] = useState<'home' | 'steal' | 'library'>('home')
+  const [menuOpen, setMenuOpen] = useState(false)
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null)
   const [singleDraft, setSingleDraft] = useState<DraftPayload | null>(null)
   const [loadingAI, setLoadingAI] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [practiceOpen, setPracticeOpen] = useState(false)
   const [backupOpen, setBackupOpen] = useState(false)
   const [search, setSearch] = useState('')
 
@@ -196,7 +199,7 @@ export default function App() {
     setSingleDraft(null)
     setSelectedCardId(card.id)
     setSelectedTopic(null)
-    show('已保存到句子库。')
+    show('偷到了。')
   }
 
   function handleSaveDraft() {
@@ -222,9 +225,8 @@ export default function App() {
     setCards((prev) => prev.filter((c) => c.id !== id))
     if (selectedCardId === id) {
       setSelectedCardId(null)
-      setMobileView('list') // 移动端删除后回到列表，避免停在空详情页
     }
-    show('已删除。')
+    show('扔了。')
   }
 
   function handleMark(cardId: string, text: string) {
@@ -282,6 +284,7 @@ export default function App() {
     }))
     setQueueItems(items)
     setQueueIndex(0)
+    queueRef.current = items // 同步更新 ref：analyzePool 里异步读的是 ref，不等 React 重渲染
     show(`AI 正在拆解 ${sentences.length} 句，拆好一张看一张。`)
     void analyzePool(items.length)
   }
@@ -394,9 +397,9 @@ export default function App() {
       setSelectedCardId(card.id)
       setSelectedTopic(null)
       setPasteClear((n) => n + 1)
-      show('已保存到句子库，这一批全处理完了。')
+      show('偷到了，这一批全处理完了。')
     } else {
-      show('已保存到句子库。')
+      show('偷到了。')
     }
   }
 
@@ -448,8 +451,8 @@ export default function App() {
     }
     show(
       saved === 0 && dupSkipped > 0
-        ? '都存过了，没有新卡片。'
-        : `已保存 ${saved} 张${dupSkipped > 0 ? `，跳过已存在的 ${dupSkipped} 句` : ''}。`,
+        ? '都偷过了，没有新卡片。'
+        : `偷到了。${saved} 张入库${dupSkipped > 0 ? `，跳过已存在的 ${dupSkipped} 句` : ''}。`,
     )
   }
 
@@ -509,86 +512,118 @@ export default function App() {
       }
     : null
 
-  // 移动端：选中卡片时切到「详情」视图
-  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
-  useEffect(() => {
-    if (selectedCardId || singleDraft || queueItems.length > 0) setMobileView('detail')
-  }, [selectedCardId, singleDraft, queueItems.length])
-  function goBackToList() {
+  // 有草稿/队列/选中卡片时，整页切到详情视图
+  const showingDetail = !!singleDraft || inQueue || !!selectedCardId
+  function closeDetail() {
+    if (inQueue) {
+      handleDiscardQueue() // 未保存的草稿不保留，粘贴框原文还在
+      return
+    }
+    if (singleDraft) {
+      handleCancelDraft()
+      return
+    }
     setSelectedCardId(null)
-    setSingleDraft(null)
-    setMobileView('list')
   }
 
   return (
-    <div className="flex h-full min-h-screen flex-col bg-ink-50">
-      <Header
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenPractice={() => setPracticeOpen(true)}
-        onOpenBackup={() => setBackupOpen(true)}
-        totalCards={cards.length}
-      />
+    <div className="flex h-full min-h-screen flex-col" style={{ background: 'var(--c-paper)' }}>
+      <TopBar onGoHome={() => setPage('home')} onOpenMenu={() => setMenuOpen(true)} />
 
-      <PasteBox
-        onGenerate={handleGenerate}
-        onStartHighlights={handleStartHighlights}
-        onError={handleError}
-        onNeedApiKey={() => setSettingsOpen(true)}
-        hasApiKey={!!settings.apiKey}
-        loading={loadingAI}
-        setLoading={setLoadingAI}
-        existingTopics={knownTopics}
-        settings={settings}
-        clearSignal={pasteClear}
-      />
-
-      {/* 桌面三栏 / 移动端单栏 */}
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-0 sm:px-4 sm:py-4">
-        <div className="grid h-full min-h-[60vh] grid-cols-1 overflow-hidden rounded-2xl border border-ink-200 bg-white shadow-card sm:min-h-[70vh] lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
-          {/* 移动端：始终显示列表视图，但用 mobileView 切换显示哪个 */}
-          <div className={`${mobileView === 'list' ? 'block' : 'hidden'} lg:block`}>
+      {/* ---------- 详情视图：草稿 / 队列 / 选中卡片 ---------- */}
+      {showingDetail ? (
+        <div className="sk-page">
+          <div className="flex items-center py-1">
+            <button type="button" className="sk-icon-btn" onClick={closeDetail} aria-label="返回">
+              <IconArrowLeft size={22} />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <CardDetail
+              selected={selectedCard}
+              draft={draft}
+              queue={queueInfo}
+              onChangeDraft={handleChangeDraft}
+              onSaveDraft={handleSaveDraft}
+              onCancelDraft={handleCancelDraft}
+              onSaveExisting={handleSaveExisting}
+              onDelete={handleDelete}
+              onClose={closeDetail}
+              knownTopics={knownTopics}
+            />
+          </div>
+        </div>
+      ) : page === 'home' ? (
+        /* ---------- 首页：今日一句 ---------- */
+        <HomePage
+          cards={cards}
+          onMark={handleMark}
+          onGoSteal={() => setPage('steal')}
+          onOpenCard={(id) => {
+            setSelectedTopic(null)
+            setSelectedCardId(id)
+          }}
+        />
+      ) : page === 'steal' ? (
+        /* ---------- 偷页 ---------- */
+        <div className="sk-page">
+          <div className="flex items-center py-1">
+            <button
+              type="button"
+              className="sk-icon-btn"
+              onClick={() => setPage('home')}
+              aria-label="回首页"
+            >
+              <IconArrowLeft size={22} />
+            </button>
+          </div>
+          <PasteBox
+            onGenerate={handleGenerate}
+            onStartHighlights={handleStartHighlights}
+            onError={handleError}
+            onNeedApiKey={() => setSettingsOpen(true)}
+            hasApiKey={!!settings.apiKey}
+            loading={loadingAI}
+            setLoading={setLoadingAI}
+            existingTopics={knownTopics}
+            settings={settings}
+            clearSignal={pasteClear}
+          />
+        </div>
+      ) : (
+        /* ---------- 句子库（这一轮先保留旧布局，下一轮再改） ---------- */
+        <main className="mx-auto w-full max-w-[480px] flex-1 px-0 sm:px-3 sm:py-3">
+          <div className="h-full min-h-[60vh] overflow-hidden bg-white lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:border lg:border-ink-200">
             <CardList
               cards={cards}
               selectedTopic={selectedTopic}
               onSelect={setSelectedTopic}
               selectedCardId={selectedCardId}
-              onSelectCard={setSelectedCardId}
+              onSelectCard={(id) => setSelectedCardId(id)}
               searchQuery={search}
               onSearchChange={setSearch}
             />
-          </div>
-          {/* 右侧详情栏：lg 始终显示；移动端按 mobileView */}
-          <div
-            className={`${mobileView === 'detail' ? 'block' : 'hidden'} lg:col-span-1 lg:block`}
-          >
-            <div className="flex h-full min-h-[60vh] flex-col">
-              <div className="border-b border-ink-200 px-3 py-2 lg:hidden">
-                <button className="ink-btn-ghost text-xs" onClick={goBackToList}>
-                  ← 返回列表
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <CardDetail
-                  selected={selectedCard}
-                  draft={draft}
-                  queue={queueInfo}
-                  onChangeDraft={handleChangeDraft}
-                  onSaveDraft={handleSaveDraft}
-                  onCancelDraft={handleCancelDraft}
-                  onSaveExisting={handleSaveExisting}
-                  onDelete={handleDelete}
-                  onClose={goBackToList}
-                  knownTopics={knownTopics}
-                />
+            <div className="hidden lg:block">
+              <div className="flex h-full min-h-[60vh] flex-col">
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <CardDetail
+                    selected={selectedCard}
+                    draft={draft}
+                    queue={queueInfo}
+                    onChangeDraft={handleChangeDraft}
+                    onSaveDraft={handleSaveDraft}
+                    onCancelDraft={handleCancelDraft}
+                    onSaveExisting={handleSaveExisting}
+                    onDelete={handleDelete}
+                    onClose={() => setSelectedCardId(null)}
+                    knownTopics={knownTopics}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </main>
-
-      <footer className="mt-6 px-4 pb-6 text-center text-xs text-ink-400">
-        偷得半句 · 数据保存在当前设备的浏览器里，换设备不会自动同步（可在「⚙ 设置 → 备份」导出）
-      </footer>
+        </main>
+      )}
 
       {/* 挑亮点面板 */}
       <HighlightPicker
@@ -607,18 +642,20 @@ export default function App() {
       {/* 重复句子弹窗 */}
       {dupDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-ink-900/40" onClick={() => setDupDialog(null)} />
-          <div className="relative w-full max-w-sm rounded-2xl border border-ink-200 bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-ink-900">这句已经存过了</h3>
-            <p className="mt-2 text-sm text-ink-600">句子库里已有一句一模一样的原句。</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <button className="ink-btn-ghost" onClick={() => setDupDialog(null)}>
+          <div className="absolute inset-0" style={{ background: 'rgba(17,17,17,0.3)' }} onClick={() => setDupDialog(null)} />
+          <div className="sketch relative w-full max-w-sm p-6">
+            <h3 style={{ fontSize: 'var(--fs-big)' }}>这句已经存过了</h3>
+            <p className="mt-2" style={{ fontSize: 'var(--fs-small)', color: 'var(--c-gray)' }}>
+              句子库里已有一句一模一样的原句。
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button className="sk-btn" onClick={() => setDupDialog(null)}>
                 继续编辑
               </button>
-              <button className="ink-btn-outline" onClick={handleDupView}>
+              <button className="sk-btn" onClick={handleDupView}>
                 查看已有卡片
               </button>
-              <button className="ink-btn-primary" onClick={handleDupForceSave}>
+              <button className="sk-btn sk-btn-solid" onClick={handleDupForceSave}>
                 仍然保存
               </button>
             </div>
@@ -626,18 +663,19 @@ export default function App() {
         </div>
       ) : null}
 
+      <MenuOverlay
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onOpenLibrary={() => setPage('library')}
+        onOpenBackup={() => setBackupOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+
       <SettingsModal
         open={settingsOpen}
         initial={settings}
         onClose={() => setSettingsOpen(false)}
         onSave={handleSaveSettings}
-      />
-
-      <PracticeView
-        open={practiceOpen}
-        cards={cards}
-        onClose={() => setPracticeOpen(false)}
-        onMark={handleMark}
       />
 
       <BackupModal

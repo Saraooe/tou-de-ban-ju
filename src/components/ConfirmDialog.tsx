@@ -34,8 +34,8 @@ export function ConfirmDialog({
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-ink-900/30 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative w-full max-w-sm rounded-2xl border border-ink-200 bg-white p-6 shadow-xl">
+      <div className="absolute inset-0" style={{ background: 'rgba(17,17,17,0.3)' }} onClick={onCancel} />
+      <div className="sketch relative w-full max-w-sm p-6">
         <h3 className="text-lg font-semibold text-ink-900">{title}</h3>
         <p className="mt-2 text-sm text-ink-600">{message}</p>
         <div className="mt-6 flex justify-end gap-2">
@@ -82,8 +82,8 @@ export function DuplicateDialog({
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-ink-900/30 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative w-full max-w-md rounded-2xl border border-ink-200 bg-white p-6 shadow-xl">
+      <div className="absolute inset-0" style={{ background: 'rgba(17,17,17,0.3)' }} onClick={onCancel} />
+      <div className="sketch relative w-full max-w-md p-6">
         <h3 className="text-lg font-semibold text-ink-900">这句已经存过了</h3>
         <p className="mt-2 break-words font-serif text-sm text-ink-700">{sentence}</p>
         <p className="mt-2 text-xs text-ink-500">
@@ -113,7 +113,16 @@ export function useToast() {
     window.setTimeout(() => setMsg((m) => (m === text ? null : m)), 2200)
   }
   const node = msg ? (
-    <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink-900 px-4 py-2 text-sm text-white shadow-lg">
+    <div
+      className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 px-4 py-2"
+      style={{
+        background: 'var(--c-ink)',
+        color: 'var(--c-paper)',
+        fontSize: 'var(--fs-small)',
+        border: 'var(--bw) solid var(--c-ink)',
+        borderRadius: 'var(--radius-sketch)',
+      }}
+    >
       {msg}
     </div>
   ) : null

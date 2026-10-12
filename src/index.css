@@ -2,116 +2,187 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   设计变量 —— 全部设计 token 集中在这（为移植小程序做准备）
+   ============================================================ */
+:root {
+  /* 颜色：只允许这三个 */
+  --c-ink: #111111;      /* 文字与线条 */
+  --c-paper: #ffffff;    /* 背景 */
+  --c-gray: #8a8a8a;     /* 次要文字 */
+
+  /* 边框 */
+  --bw: 2px;                                   /* 手绘边框粗细 */
+  --radius-sketch: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  --radius-sketch-lg: 28px 255px 24px 255px / 255px 28px 255px 24px;
+
+  /* 字体 */
+  --f-hand: 'Patrick Hand', 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', 'PingFang SC', sans-serif;
+
+  /* 字号 */
+  --fs-tiny: 12px;
+  --fs-small: 14px;
+  --fs-base: 17px;
+  --fs-big: 26px;        /* 今日一句 */
+
+  /* 间距 */
+  --sp-page: 20px;
+  --sp-gap: 12px;
+
+  /* 触控目标最小尺寸 */
+  --tap: 44px;
+}
+
+/* ============================================================
+   字体：自托管 + 子集（public/fonts）
+   ============================================================ */
+@font-face {
+  font-family: 'Patrick Hand';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/patrick-hand.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Ma Shan Zheng';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ma-shan-zheng-subset.woff2') format('woff2');
+}
+
 @layer base {
   html, body, #root { height: 100%; }
   body {
-    /* 纸面留一点点纹理感，但基本就是白纸 */
-    background: #ffffff;
+    background: var(--c-paper);
+    color: var(--c-ink);
+    font-family: var(--f-hand);
+    /* 英文界面文字全小写（中文不受影响） */
+    text-transform: lowercase;
+    -webkit-font-smoothing: antialiased;
   }
+  button { font-family: inherit; }
+  input, textarea { font-family: inherit; }
+  /* 用户输入的英文原句保持原样，不做小写转换 */
+  input, textarea { text-transform: none; }
 }
 
 @layer components {
-  /* ---------- 手绘边框基础 ---------- */
-  .sketch-border {
-    border: 1.6px solid #171717;
-    border-radius: 8px 12px 9px 13px / 12px 8px 13px 9px;
+  /* ---------- 手绘边框：不规则圆角 + 2px 实线 ---------- */
+  .sketch {
+    border: var(--bw) solid var(--c-ink);
+    border-radius: var(--radius-sketch);
+    background: var(--c-paper);
   }
-  .sketch-border-sm {
-    border: 1.5px solid #171717;
-    border-radius: 4px 9px 5px 10px / 9px 4px 10px 5px;
+  .sketch-lg {
+    border: var(--bw) solid var(--c-ink);
+    border-radius: var(--radius-sketch-lg);
+    background: var(--c-paper);
   }
-  .sketch-pill {
-    border: 1.5px solid #171717;
-    border-radius: 999px;
-  }
-
-  /* ---------- 卡片 ---------- */
-  .ink-card {
-    @apply border border-ink-900 bg-white transition;
-    border-radius: 10px 14px 10px 15px / 14px 10px 15px 10px;
-    border-width: 1.6px;
-  }
-  .ink-card-hover {
-    @apply hover:shadow-cardHover hover:-translate-y-0.5;
+  /* 手绘圆（勾选圈、头像圈） */
+  .sketch-circle {
+    border: var(--bw) solid var(--c-ink);
+    border-radius: 48% 52% 46% 54% / 52% 46% 54% 48%;
   }
 
   /* ---------- 按钮 ---------- */
-  .ink-btn {
-    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40;
-    border: 1.6px solid #171717;
-    border-radius: 6px 11px 7px 12px / 11px 6px 12px 7px;
-    background: #fff;
+  .sk-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: var(--tap);
+    padding: 8px 18px;
+    font-size: var(--fs-base);
+    color: var(--c-ink);
+    background: var(--c-paper);
+    border: var(--bw) solid var(--c-ink);
+    border-radius: var(--radius-sketch);
+    cursor: pointer;
   }
-  .ink-btn-primary {
-    @apply ink-btn bg-ink-900 text-white;
+  .sk-btn:disabled { opacity: 0.35; cursor: default; }
+  .sk-btn-solid { background: var(--c-ink); color: var(--c-paper); }
+  /* 大号主按钮（偷 / 拆这 N 句） */
+  .sk-btn-big {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 64px;
+    padding: 12px 32px;
+    font-size: 22px;
+    color: var(--c-ink);
+    background: var(--c-paper);
+    border: var(--bw) solid var(--c-ink);
+    border-radius: var(--radius-sketch-lg);
+    cursor: pointer;
   }
-  .ink-btn-primary:hover:not(:disabled) {
-    transform: translate(-1px, -1px);
-    box-shadow: 2px 2px 0 rgba(23, 23, 23, 0.85);
+  .sk-btn-big:disabled { opacity: 0.35; cursor: default; }
+  /* 图标小按钮：无框，触控区够大 */
+  .sk-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--tap);
+    min-height: var(--tap);
+    border: none;
+    background: none;
+    color: var(--c-ink);
+    cursor: pointer;
+    padding: 0;
   }
-  .ink-btn-primary:active:not(:disabled) {
-    transform: translate(0, 0);
-    box-shadow: none;
-  }
-  .ink-btn-ghost {
-    @apply ink-btn border-transparent bg-transparent text-ink-700;
-  }
-  .ink-btn-ghost:hover:not(:disabled) {
-    @apply border-ink-900;
-  }
-  .ink-btn-outline {
-    @apply ink-btn bg-white text-ink-900;
-  }
-  .ink-btn-outline:hover:not(:disabled) {
-    transform: translate(-1px, -1px);
-    box-shadow: 2px 2px 0 #171717;
-  }
-  .ink-btn-outline:active:not(:disabled) {
-    transform: none;
-    box-shadow: none;
-  }
+  .sk-icon-btn:disabled { opacity: 0.35; cursor: default; }
 
   /* ---------- 输入 ---------- */
-  .ink-input {
-    @apply w-full border border-ink-900 bg-white px-3 py-2 text-sm text-ink-900 outline-none;
-    border-radius: 7px 11px 8px 12px / 11px 7px 12px 8px;
-    border-width: 1.5px;
-    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  .sk-input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: var(--fs-base);
+    color: var(--c-ink);
+    background: var(--c-paper);
+    border: var(--bw) solid var(--c-ink);
+    border-radius: var(--radius-sketch);
+    outline: none;
   }
-  .ink-input::placeholder {
-    @apply text-ink-400;
-  }
-  .ink-input:focus {
-    box-shadow: 2.5px 2.5px 0 #171717;
-    transform: translate(-1px, -1px);
-  }
-
-  /* ---------- 标签 ---------- */
-  .ink-label {
-    @apply mb-1.5 block text-xs text-ink-600;
-  }
-
-  /* ---------- 主题 chip ---------- */
-  .ink-chip {
-    @apply inline-flex items-center gap-1 border border-ink-900 bg-white px-2.5 py-0.5 text-xs text-ink-800;
-    border-radius: 999px;
-    border-width: 1.4px;
-  }
-  .ink-chip-active {
-    @apply border-ink-900 bg-ink-900 text-white;
+  .sk-input::placeholder { color: var(--c-gray); }
+  .sk-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: var(--fs-tiny);
+    color: var(--c-gray);
   }
 
-  /* 句型骨架里的 ___ ：手写风的下划线填空 */
+  /* ---------- 手绘下划线填空（句型骨架的 ___） ---------- */
   .skeleton-mark {
-    @apply px-1 font-bold;
-    color: #171717;
+    padding: 0 6px;
+    color: var(--c-ink);
     background: none;
-    border-bottom: 2px solid #171717;
-    border-bottom-style: dashed;
+    border-bottom: var(--bw) solid var(--c-ink);
+  }
+
+  /* ---------- 全屏弹层容器（菜单 / 挑亮点 / 详情） ---------- */
+  .sk-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--c-paper);
+    display: flex;
+    flex-direction: column;
+  }
+  /* 桌面端也保持 480px 单列居中 */
+  .sk-page {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0 var(--sp-page);
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
   }
 }
 
-/* ---------- 滚动条：细灰条 ---------- */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background: #a3a3a3; border: 2px solid transparent; background-clip: padding-box; }
+/* 滚动条：细黑条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--c-ink); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }

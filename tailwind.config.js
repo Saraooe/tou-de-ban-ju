@@ -4,49 +4,29 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: [
-          '"Patrick Hand"',
-          '"LXGW WenKai"',
-          '"Kaiti SC"',
-          '"STKaiti"',
-          '"PingFang SC"',
-          'system-ui',
-          'sans-serif',
-        ],
-        // 手绘风里原句和界面用同一套手写字
-        serif: [
-          '"Patrick Hand"',
-          '"LXGW WenKai"',
-          '"Kaiti SC"',
-          '"STKaiti"',
-          'Georgia',
-          'serif',
-        ],
+        sans: ['"Patrick Hand"', '"Ma Shan Zheng"', '"Kaiti SC"', '"STKaiti"', '"PingFang SC"', 'sans-serif'],
+        serif: ['"Patrick Hand"', '"Ma Shan Zheng"', '"Kaiti SC"', '"STKaiti"', 'serif'],
       },
       colors: {
-        // 黑白灰，像铅笔描边
+        // 设计变量在 src/index.css 的 :root；这里是给旧界面过渡用的灰阶映射
         ink: {
-          50: '#fafafa',
-          100: '#f5f5f5',
-          200: '#e8e8e8',
-          300: '#d4d4d4',
-          400: '#a3a3a3',
-          500: '#737373',
-          600: '#525252',
-          700: '#404040',
-          800: '#262626',
-          900: '#171717',
-        },
-        accent: {
-          DEFAULT: '#171717',
-          soft: '#404040',
+          50: '#ffffff',
+          100: '#ffffff',
+          200: '#111111',
+          300: '#8a8a8a',
+          400: '#8a8a8a',
+          500: '#8a8a8a',
+          600: '#111111',
+          700: '#111111',
+          800: '#111111',
+          900: '#111111',
         },
       },
       boxShadow: {
+        // grug 风：一律无阴影
         card: 'none',
-        // 手绘风：偏移的实心阴影，像用笔又描了一笔
-        cardHover: '3px 3px 0 #171717',
-        sketch: '2px 2px 0 #171717',
+        cardHover: 'none',
+        sketch: 'none',
       },
     },
   },

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Settings } from '@/types'
 import { extractHighlights, type Highlight } from '@/services/deepseek'
+import { HandCheck } from './hand/HandCheck'
+import { IconClose } from './hand/HandIcon'
 
 interface Item extends Highlight {
   checked: boolean
@@ -120,78 +122,72 @@ export function HighlightPicker({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      <div className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm" onClick={loading ? undefined : onClose} />
+      <div className="absolute inset-0" style={{ background: 'rgba(17,17,17,0.3)' }} onClick={loading ? undefined : onClose} />
       {/* 手机端全屏，桌面端居中弹窗 */}
-      <div className="relative flex h-[100dvh] w-full flex-col bg-white sm:h-auto sm:max-h-[85vh] sm:max-w-2xl sm:rounded-2xl sm:border sm:border-ink-200 sm:shadow-2xl">
+      <div className="sketch relative flex h-[100dvh] w-full flex-col bg-white sm:h-auto sm:max-h-[85vh] sm:w-full sm:max-w-[480px]">
         {/* 标题栏 */}
-        <div className="flex items-start justify-between gap-3 border-b border-ink-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-3 px-5 pt-4">
           <div>
-            <h2 className="text-lg font-semibold text-ink-900">挑出值得偷的句子</h2>
-            <p className="mt-0.5 text-xs text-ink-500">
-              AI 从你粘贴的内容里找了几句，勾选想学的。
+            <h2 style={{ fontSize: 'var(--fs-big)' }}>挑出值得偷的句子</h2>
+            <p style={{ color: 'var(--c-gray)', fontSize: 'var(--fs-small)' }}>
+              AI 从你粘贴的内容里找了几句，点圆圈勾选。
             </p>
           </div>
           <button
-            className="ink-btn-ghost min-h-[44px]"
+            type="button"
+            className="sk-icon-btn"
+            style={{ minHeight: 'var(--tap)' }}
             onClick={onClose}
             disabled={loading}
+            aria-label="关闭"
           >
-            关闭
+            <IconClose size={22} />
           </button>
         </div>
 
         {/* 主体 */}
-        <div className="flex-1 space-y-3 overflow-y-auto p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
           {truncated ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p style={{ color: 'var(--c-gray)', fontSize: 'var(--fs-small)' }}>
               内容较长，只分析了前 4000 字符。
             </p>
           ) : null}
 
           {loading ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-3 text-sm text-ink-500">
-              <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-ink-200 border-t-ink-900" />
+            <div
+              className="flex h-40 items-center justify-center"
+              style={{ color: 'var(--c-gray)', fontSize: 'var(--fs-base)' }}
+            >
               AI 正在找亮点…
             </div>
           ) : error ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-3 text-center">
-              <p className="max-w-sm text-sm text-red-600">{error}</p>
-              <div className="flex gap-2">
-                <button className="ink-btn-outline min-h-[44px]" onClick={retry}>
-                  重试
+            <div className="flex h-40 flex-col items-center justify-center gap-4 text-center">
+              <p className="max-w-sm" style={{ fontSize: 'var(--fs-small)' }}>{error}</p>
+              <div className="flex gap-3">
+                <button type="button" className="sk-btn" onClick={retry}>
+                  再试一次
                 </button>
-                <button className="ink-btn-ghost min-h-[44px]" onClick={onTreatWhole}>
+                <button type="button" className="sk-btn" onClick={onTreatWhole}>
                   整段当一句处理
                 </button>
               </div>
             </div>
           ) : (
             items.map((it, i) => (
-              <div
-                key={i}
-                className={`rounded-xl border p-3 transition ${
-                  it.checked ? 'border-ink-900 bg-ink-50/60' : 'border-ink-200 bg-white'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  {/* 触控区域加大的复选框 */}
-                  <label className="flex min-h-[44px] cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 accent-ink-900"
-                      checked={it.checked}
-                      onChange={() => toggle(i)}
-                    />
-                  </label>
-                  <div className="min-w-0 flex-1">
-                    <textarea
-                      className="ink-input min-h-[44px] resize-y font-serif text-base"
-                      value={it.sentence}
-                      rows={2}
-                      onChange={(e) => editSentence(i, e.target.value)}
-                    />
-                    <p className="mt-1.5 text-xs leading-relaxed text-ink-400">{it.reason}</p>
-                  </div>
+              <div key={i} className="flex items-start gap-2">
+                {/* 手绘圆圈勾选 */}
+                <HandCheck used={it.checked} onToggle={() => toggle(i)} label="勾选这句" />
+                <div className="min-w-0 flex-1">
+                  <textarea
+                    className="sk-input resize-y"
+                    style={{ minHeight: 'var(--tap)', lineHeight: 1.5 }}
+                    value={it.sentence}
+                    rows={2}
+                    onChange={(e) => editSentence(i, e.target.value)}
+                  />
+                  <p style={{ marginTop: 4, color: 'var(--c-gray)', fontSize: 'var(--fs-tiny)' }}>
+                    {it.reason}
+                  </p>
                 </div>
               </div>
             ))
@@ -200,25 +196,37 @@ export function HighlightPicker({
 
         {/* 底部按钮 */}
         {!loading && !error ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink-200 px-5 py-3">
-            <div className="flex gap-2">
+          <div
+            className="flex flex-wrap items-center justify-between gap-2 px-5 pb-6 pt-2"
+            style={{ borderTop: 'var(--bw) solid var(--c-ink)' }}
+          >
+            <div className="flex gap-3">
               <button
-                className="ink-btn-outline min-h-[44px]"
+                type="button"
+                className="sk-btn"
+                style={{ minHeight: 'var(--tap)' }}
                 onClick={findMore}
                 disabled={moreLoading}
               >
                 {moreLoading ? '找句子中…' : '再多找几句'}
               </button>
-              <button className="ink-btn-ghost min-h-[44px]" onClick={onTreatWhole}>
-                整段当一句处理
+              <button
+                type="button"
+                className="sk-icon-btn"
+                onClick={onTreatWhole}
+                style={{ fontSize: 'var(--fs-small)' }}
+              >
+                整段当一句
               </button>
             </div>
             <button
-              className="ink-btn-primary min-h-[44px]"
+              type="button"
+              className="sk-btn-big"
+              style={{ minHeight: 56, padding: '8px 24px', fontSize: 'var(--fs-base)' }}
               disabled={selectedCount === 0}
               onClick={() => onConfirm(items.filter((i) => i.checked).map((i) => i.sentence))}
             >
-              拆解选中的 {selectedCount} 句
+              拆这 {selectedCount} 句
             </button>
           </div>
         ) : null}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Settings } from '@/types'
 import { analyzeSentence, type AnalyzeResult } from '@/services/deepseek'
 import { isSingleSentence, stripNoise } from '@/utils/text'
+import { IconMore, IconHand } from './hand/HandIcon'
 
 interface Props {
   onGenerate: (input: {
@@ -131,78 +132,77 @@ export function PasteBox({
   }
 
   return (
-    <section className="border-b border-ink-200 bg-gradient-to-b from-white to-ink-50/60">
-      <div className="mx-auto max-w-[1400px] px-4 py-5 sm:px-6">
-        <div className="flex flex-col gap-2">
-          <label className="ink-label flex items-center gap-2">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
-            粘贴新句子
-          </label>
-          <textarea
-            className="ink-input min-h-[64px] resize-y font-serif text-base"
-            placeholder="粘贴你在 TikTok 看到的句子或字幕…（大段转写也行，AI 会挑出值得学的句子）"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onFocus={() => setExpanded(true)}
-          />
-          {expanded && (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input
-                className="ink-input"
-                placeholder="来源链接（可选）"
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-              />
-              <input
-                className="ink-input"
-                placeholder="主题（可选，AI 也会给建议）"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                list="paste-topics"
-              />
-              <datalist id="paste-topics">
-                {existingTopics.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-2">
+    <div className="flex flex-1 flex-col justify-end pb-6">
+      <div className="flex flex-col gap-3">
+        <textarea
+          className="sk-input resize-none"
+          style={{ minHeight: 180, lineHeight: 1.6 }}
+          placeholder="paste from tiktok…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        {expanded && (
+          <div className="flex flex-col gap-3">
+            <input
+              className="sk-input"
+              placeholder="link (可选)"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+            />
+            <input
+              className="sk-input"
+              placeholder="主题 (可选)"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              list="paste-topics"
+            />
+            <datalist id="paste-topics">
+              {existingTopics.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
+          </div>
+        )}
+        <div className="flex items-end justify-between gap-2">
+          {/* 更多：收起来源链接 / 主题 */}
+          <button
+            type="button"
+            className="sk-icon-btn flex-col"
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={expanded ? '收起来源和主题' : '加来源链接或主题'}
+          >
+            <IconMore size={22} />
+            <span style={{ fontSize: 'var(--fs-tiny)', color: 'var(--c-gray)' }}>
+              {expanded ? '收起' : '更多'}
+            </span>
+          </button>
+
+          <div className="flex items-end gap-4">
+            {/* 手填：不用 AI，自己填字段 */}
             <button
               type="button"
-              className="text-xs text-ink-500 hover:text-ink-700"
-              onClick={() => setExpanded((v) => !v)}
+              className="sk-icon-btn flex-col"
+              onClick={handleManual}
+              disabled={loading || !text.trim()}
+              aria-label="手动填写"
             >
-              {expanded ? '收起附加字段' : '添加来源链接 / 主题'}
+              <IconHand size={24} />
+              <span style={{ fontSize: 'var(--fs-tiny)', color: 'var(--c-gray)' }}>手填</span>
             </button>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="ink-btn-outline"
-                onClick={handleManual}
-                disabled={loading || !text.trim()}
-              >
-                手动填写
-              </button>
-              <button
-                type="button"
-                className="ink-btn-primary"
-                onClick={handleGenerate}
-                disabled={loading || !text.trim()}
-              >
-                {loading ? (
-                  <>
-                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                    AI 拆解中…
-                  </>
-                ) : (
-                  <>生成卡片</>
-                )}
-              </button>
-            </div>
+
+            {/* 主按钮：偷 */}
+            <button
+              type="button"
+              className="sk-btn-big"
+              style={{ width: 128, height: 84 }}
+              onClick={handleGenerate}
+              disabled={loading || !text.trim()}
+            >
+              {loading ? '偷着…' : '偷'}
+            </button>
           </div>
         </div>
       </div>
-    </section>
+    </div>
   )
 }
